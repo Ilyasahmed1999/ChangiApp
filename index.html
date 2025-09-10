@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Changi Irregular Ops Reporting</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'changi-purple': '#7C3AED',
+                        'changi-light-purple': '#A855F7',
+                        'changi-dark-purple': '#5B21B6',
+                        'changi-accent': '#EC4899'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&display=swap');
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            box-sizing: border-box;
+        }
+        
+        /* Improve touch targets for mobile */
+        button, .incident-card {
+            min-height: 44px; /* iOS recommended minimum touch target */
+            touch-action: manipulation; /* Disable double-tap zoom */
+        }
+        
+        /* Smooth scrolling for mobile */
+        html {
+            scroll-behavior: smooth;
+            -webkit-text-size-adjust: 100%; /* Prevent text scaling on iOS */
+        }
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow-x: hidden;
+            background: #f8fafc;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            min-height: 100dvh; /* Dynamic viewport height for mobile */
+        }
+        .mobile-container {
+            width: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+            position: relative;
+            background: #fff;
+            overflow: hidden; /* Changed from overflow-x: hidden to overflow: hidden */
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Mobile-first responsive design */
+        @media (min-width: 768px) {
+            body {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .mobile-container {
+                width: 380px; /* Increased from 375px to 480px */
+                height: 850px; /* Increased from 812px to 900px */
+                border-radius: 40px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1);
+                border: 8px solid #1a1a1a;
+                min-height: auto;
+            }
+        }
+        
+        /* Larger desktop screens */
+        @media (min-width: 1200px) {
+            .mobile-container {
+                width: 440px; /* Even wider on large screens */
+                height: 920px;
+            }
+        }
+        .status-bar {
+            height: 44px;
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            /* Add safe area support for notched devices */
+            padding-top: env(safe-area-inset-top, 0);
+            padding-left: max(20px, env(safe-area-inset-left));
+            padding-right: max(20px, env(safe-area-inset-right));
+        }
+        
+        /* Hide status bar on mobile, show on desktop simulation */
+        @media (max-width: 767px) {
+            .status-bar {
+                display: none;
+            }
+        }
+        .app-header {
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+            padding: 20px; /* Increased back to 20px for better mobile visibility */
+            color: white;
+            /* Add safe area support */
+            padding-top: max(20px, env(safe-area-inset-top, 20px));
+            padding-left: max(20px, env(safe-area-inset-left));
+            padding-right: max(20px, env(safe-area-inset-right));
+        }
+        .incident-card {
+            background: white;
+            border-radius: 16px; /* Increased back to 16px */
+            padding: 20px; /* Increased back to 20px for better mobile visibility */
+            margin-bottom: 12px; /* Increased back to 12px */
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08); /* Enhanced shadow */
+            border: 1px solid rgba(124, 58, 237, 0.1);
+            transition: all 0.2s ease;
+            active: scale(0.98);
+        }
+        .incident-card:active {
+            transform: scale(0.98);
+            box-shadow: 0 1px 6px rgba(0,0,0,0.12);
+        }
+        .icon-container {
+            width: 56px; /* Increased back to 56px for better visibility */
+            height: 56px; /* Increased back to 56px for better visibility */
+            border-radius: 16px; /* Increased back to 16px */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px; /* Added margin-bottom for better spacing */
+        }
+        .form-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 50;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .form-overlay.active {
+            transform: translateY(0);
+        }
+        
+        /* Mobile-specific form overlay */
+        @media (max-width: 767px) {
+            .form-overlay {
+                /* Add safe area support for mobile */
+                padding-top: env(safe-area-inset-top, 0);
+                padding-bottom: env(safe-area-inset-bottom, 0);
+                padding-left: env(safe-area-inset-left, 0);
+                padding-right: env(safe-area-inset-right, 0);
+            }
+        }
+        
+        /* Desktop form overlay adjustments */
+        @media (min-width: 768px) {
+            .form-overlay {
+                position: absolute;
+                border-radius: 40px;
+                overflow: hidden;
+            }
+        }
+        .input-field {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 16px;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            width: 100%;
+            box-sizing: border-box;
+            /* Prevent zoom on iOS */
+            font-size: 16px;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #7C3AED;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+        
+        /* Textarea specific styling */
+        textarea.input-field {
+            resize: vertical;
+            min-height: 120px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 16px;
+            font-weight: 600;
+            font-size: 16px;
+            border: none;
+            width: 100%;
+            box-sizing: border-box;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            /* Prevent zoom on iOS */
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+        .home-indicator {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 134px;
+            height: 5px;
+            background: #000;
+            border-radius: 3px;
+            opacity: 0.3;
+            z-index: 100;
+        }
+        .phone-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;
+            height: 30px;
+            background: #1a1a1a;
+            border-radius: 0 0 20px 20px;
+            z-index: 200;
+        }
+        
+        /* Hide phone notch on actual mobile devices */
+        @media (max-width: 767px) {
+            .phone-notch {
+                display: none;
+            }
+        }
+
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Mobile App Container -->
+    <div class="mobile-container">
+        <!-- Phone Notch -->
+        <div class="phone-notch"></div>
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="flex items-center space-x-1">
+                <span>9:41</span>
+            </div>
+            <div class="flex items-center space-x-1">
+                <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor">
+                    <path d="M16 0H2C0.9 0 0 0.9 0 2v8c0 1.1 0.9 2 2 2h14c1.1 0 2-0.9 2-2V2c0-1.1-0.9-2-2-2zm0 10H2V2h14v8z"/>
+                    <path d="M15 3v6h1V3h-1z"/>
+                </svg>
+                <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor">
+                    <path d="M1 3l5.326 3L11 3"/>
+                </svg>
+                <div class="w-6 h-3 border border-white rounded-sm">
+                    <div class="w-4 h-1 bg-white rounded-sm m-0.5"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- App Header -->
+        <div class="app-header">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                        <img src="image.png" alt="Logo" class="w-8 h-8">
+                    </div>
+                    <span class="text-lg font-semibold">One Changi</span>
+                </div>
+                <div class="text-xs opacity-80">Terminal 2</div>
+            </div>
+            <h1 class="text-2xl font-bold mb-2">Irregular Ops</h1>
+            <p class="text-lg opacity-90">Report an Incident</p>
+        </div>
+
+        <!-- Main Content -->
+        <div id="mainInterface" class="flex-1 px-5 py-6 bg-gray-50" style="padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));">
+            <!-- Incident Cards -->
+            <div class="space-y-3">
+                <!-- Suspicious Baggage -->
+                <button onclick="openIncidentForm('suspicious')" class="incident-card w-full text-left">
+                    <div class="flex items-center space-x-4">
+                        <div class="icon-container bg-red-50">
+                            <svg width="28" height="28" fill="none" stroke="#DC2626" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                                <path d="M12 14l4-4m0 4l-4-4"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-gray-900 text-lg">Suspicious Baggage</h3>
+                            <p class="text-gray-500 text-sm">Report unattended or suspicious items</p>
+                        </div>
+                        <svg width="20" height="20" fill="none" stroke="#9CA3AF" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                    </div>
+                </button>
+
+                <!-- Fire Outbreak -->
+                <button onclick="openIncidentForm('fire')" class="incident-card w-full text-left">
+                    <div class="flex items-center space-x-4">
+                        <div class="icon-container bg-orange-50">
+                            <svg width="28" height="28" fill="none" stroke="#EA580C" stroke-width="2">
+                                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-gray-900 text-lg">Fire Outbreak</h3>
+                            <p class="text-gray-500 text-sm">Emergency fire or smoke incident</p>
+                        </div>
+                        <svg width="20" height="20" fill="none" stroke="#9CA3AF" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                    </div>
+                </button>
+
+                <!-- Personal Injury -->
+                <button onclick="openIncidentForm('injury')" class="incident-card w-full text-left">
+                    <div class="flex items-center space-x-4">
+                        <div class="icon-container bg-pink-50">
+                            <svg width="28" height="28" fill="none" stroke="#EC4899" stroke-width="2">
+                                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7z"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-gray-900 text-lg">Personal Injury</h3>
+                            <p class="text-gray-500 text-sm">Medical emergency or accident</p>
+                        </div>
+                        <svg width="20" height="20" fill="none" stroke="#9CA3AF" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                    </div>
+                </button>
+
+                <!-- Equipment Breakdown -->
+                <button onclick="openIncidentForm('equipment')" class="incident-card w-full text-left">
+                    <div class="flex items-center space-x-4">
+                        <div class="icon-container bg-yellow-50">
+                            <svg width="28" height="28" fill="none" stroke="#D97706" stroke-width="2">
+                                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-gray-900 text-lg">Equipment Breakdown</h3>
+                            <p class="text-gray-500 text-sm">Facility or equipment malfunction</p>
+                        </div>
+                        <svg width="20" height="20" fill="none" stroke="#9CA3AF" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                    </div>
+                </button>
+
+                <!-- Others -->
+                <button onclick="openIncidentForm('others')" class="incident-card w-full text-left">
+                    <div class="flex items-center space-x-4">
+                        <div class="icon-container bg-purple-50">
+                            <svg width="28" height="28" fill="none" stroke="#7C3AED" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="12" y1="8" x2="12" y2="16"/>
+                                <line x1="8" y1="12" x2="16" y2="12"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-gray-900 text-lg">Other Incident</h3>
+                            <p class="text-gray-500 text-sm">Report other operational issues</p>
+                        </div>
+                        <svg width="20" height="20" fill="none" stroke="#9CA3AF" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Form Overlay -->
+        <div id="formOverlay" class="form-overlay">
+            <div class="h-full flex flex-col">
+                <!-- Form Header -->
+                <div class="app-header">
+                    <div class="flex items-center justify-between mb-4">
+                        <button onclick="closeForm()" class="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M15 18l-6-6 6-6"/>
+                            </svg>
+                        </button>
+                        <span class="text-sm opacity-80">Report Form</span>
+                    </div>
+                    <h2 id="formTitle" class="text-2xl font-bold mb-1">Report Incident</h2>
+                    <p class="text-lg opacity-90">Fill in the details below</p>
+                </div>
+
+                <!-- Form Content -->
+                <div class="flex-1 overflow-y-auto px-5 py-6 bg-gray-50">
+                    <form id="incidentForm" class="space-y-5">
+                        <!-- Incident Type -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-900 mb-3">Incident Type</label>
+                            <input id="incidentType" type="text" readonly class="input-field w-full">
+                        </div>
+
+                        <!-- Location -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-900 mb-3">Location</label>
+                            <input id="locationField" type="text" class="input-field w-full" placeholder="Enter location details">
+                        </div>
+
+                        <!-- Description -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-900 mb-3">Description</label>
+                            <textarea id="descriptionField" rows="4" class="input-field w-full resize-none" placeholder="Describe the incident in detail"></textarea>
+                        </div>
+
+                        <!-- Photo Upload -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-900 mb-3">Photo Evidence</label>
+                            <div class="bg-white border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                                <input type="file" id="photoUpload" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                                <div id="uploadArea" onclick="document.getElementById('photoUpload').click()" class="cursor-pointer">
+                                    <div class="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+                                        <svg width="24" height="24" fill="none" stroke="#6B7280" stroke-width="2">
+                                            <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                        </svg>
+                                    </div>
+                                    <p class="text-sm text-gray-600 font-medium">Tap to take photo</p>
+                                    <p class="text-xs text-gray-400 mt-1">or select from gallery</p>
+                                </div>
+                                <div id="photoPreview" class="hidden mt-4">
+                                    <img id="previewImage" class="max-w-full h-32 object-cover rounded-lg mx-auto">
+                                    <p id="fileName" class="text-sm text-gray-600 mt-2 font-medium"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Priority Level -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-900 mb-3">Priority Level</label>
+                            <select id="priorityField" class="input-field w-full">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="critical">Critical</option>
+                            </select>
+                        </div>
+
+                        <!-- Reporter Information -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-900 mb-3">Reporter Name</label>
+                            <input id="reporterField" type="text" class="input-field w-full" placeholder="Your name">
+                        </div>
+
+                        <!-- Contact -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-900 mb-3">Contact Number</label>
+                            <input id="contactField" type="tel" class="input-field w-full" placeholder="+65 XXXX XXXX">
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="px-5 py-6 bg-white border-t border-gray-100">
+                    <div class="space-y-3">
+                        <button onclick="submitReport()" class="btn-primary w-full">
+                            Submit Report
+                        </button>
+                        <button onclick="closeForm()" class="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-700 font-semibold bg-white">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Home Indicator -->
+        <div class="home-indicator"></div>
+    </div>
+
+    <!-- Success Modal -->
+        <div id="successModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-30 hidden">
+            <div class="bg-white rounded-xl p-6 mx-6 max-w-sm w-full">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg width="32" height="32" fill="none" stroke="#059669" stroke-width="2">
+                            <path d="M9 12l2 2 4-4"/>
+                            <circle cx="12" cy="12" r="10"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Report Submitted</h3>
+                    <p class="text-sm text-gray-600 mb-4">Your incident report has been successfully submitted. Reference ID: <span id="referenceId" class="font-mono text-changi-purple"></span></p>
+                    <button onclick="closeSuccessModal()" class="w-full px-4 py-2 bg-changi-purple text-white rounded-lg font-medium hover:bg-changi-dark-purple">
+                        Done
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const incidentTypes = {
+            suspicious: 'Suspicious Baggage',
+            fire: 'Fire Outbreak',
+            injury: 'Personal Injury',
+            equipment: 'Equipment Breakdown',
+            others: 'Other Incident'
+        };
+
+        function openIncidentForm(type) {
+            const overlay = document.getElementById('formOverlay');
+            const title = document.getElementById('formTitle');
+            const incidentTypeField = document.getElementById('incidentType');
+            const locationField = document.getElementById('locationField');
+            
+            // Set form title and type
+            title.textContent = incidentTypes[type];
+            incidentTypeField.value = incidentTypes[type];
+            
+            // Auto-populate location for suspicious baggage
+            if (type === 'suspicious') {
+                locationField.value = 'T2 Transit near Gate 35';
+            } else {
+                locationField.value = '';
+            }
+            
+            // Clear other fields
+            document.getElementById('descriptionField').value = '';
+            document.getElementById('reporterField').value = '';
+            document.getElementById('contactField').value = '';
+            document.getElementById('priorityField').value = 'medium';
+            
+            // Reset photo upload
+            resetPhotoUpload();
+            
+            // Show form with animation
+            overlay.classList.add('active');
+        }
+
+        function closeForm() {
+            const overlay = document.getElementById('formOverlay');
+            overlay.classList.remove('active');
+        }
+
+        function handlePhotoUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const uploadArea = document.getElementById('uploadArea');
+                    const photoPreview = document.getElementById('photoPreview');
+                    const previewImage = document.getElementById('previewImage');
+                    const fileName = document.getElementById('fileName');
+                    
+                    uploadArea.classList.add('hidden');
+                    photoPreview.classList.remove('hidden');
+                    previewImage.src = e.target.result;
+                    fileName.textContent = file.name;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function resetPhotoUpload() {
+            const uploadArea = document.getElementById('uploadArea');
+            const photoPreview = document.getElementById('photoPreview');
+            const photoUpload = document.getElementById('photoUpload');
+            
+            uploadArea.classList.remove('hidden');
+            photoPreview.classList.add('hidden');
+            photoUpload.value = '';
+        }
+
+        function submitReport() {
+            const form = document.getElementById('incidentForm');
+            const formData = new FormData(form);
+            
+            // Validate required fields
+            const incidentType = document.getElementById('incidentType').value;
+            const location = document.getElementById('locationField').value;
+            const description = document.getElementById('descriptionField').value;
+            const reporter = document.getElementById('reporterField').value;
+            
+            if (!location || !description || !reporter) {
+                alert('Please fill in all required fields');
+                return;
+            }
+            
+            // Generate reference ID
+            const referenceId = 'CHG' + Date.now().toString().slice(-6);
+            
+            // Simulate submission
+            setTimeout(() => {
+                closeForm();
+                showSuccessModal(referenceId);
+            }, 500);
+        }
+
+        function showSuccessModal(referenceId) {
+            const modal = document.getElementById('successModal');
+            const refIdElement = document.getElementById('referenceId');
+            
+            refIdElement.textContent = referenceId;
+            modal.classList.remove('hidden');
+        }
+
+        function closeSuccessModal() {
+            const modal = document.getElementById('successModal');
+            modal.classList.add('hidden');
+        }
+
+        // Handle back button on mobile
+        window.addEventListener('popstate', function(event) {
+            const overlay = document.getElementById('formOverlay');
+            if (overlay.classList.contains('active')) {
+                closeForm();
+                event.preventDefault();
+            }
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97ce88f351fc47f1',t:'MTc1NzUwMzIxNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
